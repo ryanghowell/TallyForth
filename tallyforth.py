@@ -64,7 +64,8 @@ CSS = b"""
 .keypad button { font-family: monospace; font-size: 14pt; min-width: 52px; min-height: 40px; }
 .keypad .op-key { font-weight: bold; color: #3a4f7a; }
 .keypad .plus-key { font-weight: bold; font-size: 20pt; color: #3a4f7a; }
-.keypad .plus-key .enter-label { font-weight: normal; font-size: 10pt; }
+.keypad .key-word { font-weight: normal; font-size: 8pt; }
+.keypad .plus-key .key-word { font-size: 10pt; }
 .keypad .fn-key { font-size: 11pt; color: #666; }
 .keypad .side-key { font-weight: bold; color: #5d6b8a; }
 """
@@ -564,16 +565,17 @@ class TapeWindow(Gtk.ApplicationWindow):
             ("✎ Note", "note", 0, 5, 2, 1, "fn-key", "Write a note for the next line (Tab)"),
             ("T  Total", "t", 2, 5, 3, 1, "suggested-action", "Total: print it and start a fresh tally"),
         ]
+        # Keys whose symbol isn't self-explanatory get the word in small type under it.
+        words = {"+": "Enter ⏎", "Σ": "Sum", "s": "Subtotal"}
         for label, key, c, r, w, h, cls, tip in keys:
             b = Gtk.Button(label=label, can_focus=False)
-            if key == "+":
-                # The tall + is also the Enter key: big "+", small "Enter ⏎" under it.
+            if key in words:
                 b.remove(b.get_child())
                 stack = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
-                enter = Gtk.Label(label="Enter ⏎")
-                enter.get_style_context().add_class("enter-label")
-                stack.pack_start(Gtk.Label(label="+"), False, False, 0)
-                stack.pack_start(enter, False, False, 0)
+                word = Gtk.Label(label=words[key])
+                word.get_style_context().add_class("key-word")
+                stack.pack_start(Gtk.Label(label=label), False, False, 0)
+                stack.pack_start(word, False, False, 0)
                 stack.show_all()
                 b.add(stack)
             if cls:
