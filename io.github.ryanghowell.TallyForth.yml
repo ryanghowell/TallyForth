@@ -11,7 +11,8 @@ finish-args:
   - --socket=fallback-x11
   - --device=dri
   # Read-only, so tapes from a non-Flatpak install can be copied over on first run.
-  - --filesystem=xdg-data/tallyforth:ro
+  # (Not xdg-data/tallyforth: Flatpak would also mount that over the app's own data folder.)
+  - --filesystem=~/.local/share/tallyforth:ro
 modules:
   - name: tallyforth
     buildsystem: simple
