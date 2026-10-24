@@ -14,7 +14,7 @@ no scientific functions.
 
 - **Notes next to numbers.** Every line can carry a note, and lines can be just notes.
 - **Working shown on the line.** `2 × 55` stays on the tape as `2 × 55 = 110.00`.
-- **Side calculations.** Start with `=` to work something out without adding it to the tally.
+- **Side calculations.** Press `#`, the adding machine's non-add key, to work something out without adding it to the tally (`=` works too).
 - **Business percentages.** `200 + 8%` is 216, and `Σ` stands for the running total.
 - **Subtotals and totals.** `◇` shows a subtotal, and `T` totals and starts a fresh tally.
 - **Cents that add up.** Each line is rounded half-up, so printed lines always match the total.
@@ -74,7 +74,7 @@ Tapes are saved automatically in `~/.local/share/tallyforth/`.
 | --- | --- |
 | Enter or `+` | Add the line |
 | `-` | Subtract the line |
-| `=` | Side calculation (not added) |
+| `#` (or `=`) | Side calculation (not added) |
 | `t` / `s` then Enter | Total / subtotal |
 | Tab | Move from the note to the amount |
 | ↑ | Move into the tape to select lines |

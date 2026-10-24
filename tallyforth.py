@@ -83,11 +83,12 @@ note only, <tt>Enter</tt>   write a note line
 <tt>8%</tt> then <tt>+</tt>           add 8% of the running total (tax, tip)
 <tt>15%</tt> then <tt>−</tt>          take 15% off the running total (discount)
 <tt>200+8%</tt>         216: a percentage of the number before it
-<tt>Σ</tt> (or type <tt>sum</tt>)    the running total so far, e.g. <tt>Σ÷3</tt> then <tt>=</tt>
+<tt>Σ</tt> (or type <tt>sum</tt>)    the running total so far, e.g. <tt>Σ÷3</tt> then <tt>#</tt>
 <tt>Σ+10.5%</tt> then <tt>+</tt>  same as <tt>10.5%</tt> then <tt>+</tt>: the total plus 10.5% tax
 
 <b>Side calculations</b>
-<tt>Σ÷2</tt> then <tt>=</tt>          show an answer on the tape without adding it
+<tt>Σ÷2</tt> then <tt>#</tt>          show an answer on the tape without adding it
+                       (# is the adding machine's non-add key; <tt>=</tt> works too)
 Right-click it → Add to Tally   count it after all
 
 <b>Pasting a list</b>
@@ -120,7 +121,7 @@ Everything is autosaved, so closing never loses the tape."""
 
 class EditDialog(Gtk.Dialog):
     KINDS = (("+", "+  add to the tally"), ("-", "−  subtract from the tally"),
-             ("=", "=  side calculation (not added)"))
+             ("=", "#  side calculation (not added)"))
 
     def __init__(self, parent, e, title):
         super().__init__(title=title, transient_for=parent, modal=True)
@@ -557,7 +558,7 @@ class TapeWindow(Gtk.ApplicationWindow):
             ("−", "-", 4, 2, 1, 1, "op-key", "Finish the line and subtract it from the tally"),
             ("1", "1", 0, 3, 1, 1, None, None), ("2", "2", 1, 3, 1, 1, None, None),
             ("3", "3", 2, 3, 1, 1, None, None),
-            ("=", "=", 3, 3, 1, 1, "side-key", "Side calculation: show the answer without adding it"),
+            ("#", "=", 3, 3, 1, 1, "side-key", "Side calculation (#, the non-add key): show the answer without adding it"),
             ("+", "+", 4, 3, 1, 2, "plus-key", "Enter: finish the line and add it to the tally"),
             ("0", "0", 0, 4, 1, 1, None, None), ("00", "00", 1, 4, 1, 1, None, None),
             (".", ".", 2, 4, 1, 1, None, None),
@@ -595,6 +596,13 @@ class TapeWindow(Gtk.ApplicationWindow):
             return False
         # Σ alone isn't finished: + after it starts "Σ + 10.5%" instead of adding the total to itself.
         return e is not None and e["kind"] == "num" and e["expr"] != "Σ"
+
+    def _can_side(self, text):
+        try:
+            e = tc.parse_input("=" + text, "", self.tape.total)
+        except tc.ParseError:
+            return False
+        return e is not None and e["kind"] == "side"
 
     def _keypad(self, key):
         text = self.amount.get_text()
@@ -716,7 +724,7 @@ class TapeWindow(Gtk.ApplicationWindow):
                 err.get_style_context().add_class("error")
                 right.pack_start(err, False, False, 0)
                 return row
-            sym = "=" if side else tc.SIGN[e["op"]]
+            sym = "#" if side else tc.SIGN[e["op"]]
             negative = not side and (e["op"] == "-") != (r["shown"] < 0)
             if side:
                 row.set_tooltip_text("Side calculation: shown here, not added to the tally")
@@ -794,7 +802,7 @@ class TapeWindow(Gtk.ApplicationWindow):
             if not amount_text.strip():
                 self.flash("Type a calculation first; = shows its answer without adding it")
                 return False
-            amount_text = "=" + amount_text.strip().lstrip("=")
+            amount_text = "=" + amount_text.strip().lstrip("=#")
         try:
             e = tc.parse_input(amount_text, note_text, self.tape.total)
         except tc.ParseError as ex:
@@ -1146,6 +1154,10 @@ class TapeWindow(Gtk.ApplicationWindow):
         if kv in (Gdk.KEY_equal, Gdk.KEY_KP_Equal):
             self.commit(side=True)
             return True
+        # # (non-add) finishes a side calculation, but is typed as usual in a note: "Check #1042 $55".
+        if kv == Gdk.KEY_numbersign and pos == len(text) and self._can_side(text):
+            self.commit(side=True)
+            return True
         if kv == Gdk.KEY_KP_Enter:
             self.commit()
             return True
@@ -1161,7 +1173,7 @@ class TapeWindow(Gtk.ApplicationWindow):
         text = entry.get_text()
         kv = event.keyval
         ends_line = kv in self.OP_KEYS or kv in self.PRETTY_KEYS or kv in (
-            Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_equal, Gdk.KEY_KP_Equal, Gdk.KEY_percent)
+            Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_equal, Gdk.KEY_KP_Equal, Gdk.KEY_numbersign, Gdk.KEY_percent)
         if ends_line and entry.get_position() == len(text) and not self.amount.get_text().strip():
             toks, rest = tc.tokenize(text)
             if text.strip() and toks and not rest:

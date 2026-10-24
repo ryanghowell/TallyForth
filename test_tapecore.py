@@ -138,7 +138,7 @@ class TapeTests(unittest.TestCase):
         self.assertEqual(tc.loads(tc.dumps(es, 2)), (es, 2))
         txt = tc.to_text(es, 2)
         self.assertIn("3 × 4 = 12.00 +", txt)
-        self.assertIn("Σ ÷ 2 = 6.00 =", txt)
+        self.assertIn("Σ ÷ 2 = 6.00 #", txt)
         self.assertIn("12.00 T", txt)
 
 
@@ -314,6 +314,13 @@ class SigmaTests(unittest.TestCase):
             self.assertTrue(tc.parse_input(text)["expr"].startswith("Σ"), text)
         self.assertEqual(tc.parse_input("-Σ+5")["expr"], "Σ + 5")          # its own sign: as typed
         self.assertEqual(tc.parse_input("=Σ+10.5%"), tc.entry("side", "+", "Σ + 10.5%"))   # side calc keeps Σ
+
+
+class NonAddKeyTests(unittest.TestCase):
+    def test_hash_starts_a_side_calculation(self):
+        self.assertEqual(tc.parse_input("#Σ÷4"), tc.entry("side", "+", "Σ ÷ 4"))
+        self.assertEqual(tc.parse_input("=Σ÷4"), tc.entry("side", "+", "Σ ÷ 4"))     # = still works
+        self.assertEqual(tc.parse_input("Check #1042 $55"), tc.entry("num", "+", "55", "Check #1042"))
 
 
 if __name__ == "__main__":

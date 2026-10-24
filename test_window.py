@@ -144,6 +144,26 @@ class WindowTests(unittest.TestCase):
         self.assertIn("10.5%", w.status.get_text())
         self.assertEqual(len(w.entries), 2)
 
+    def test_hash_key(self):
+        from gi.repository import Gdk
+        self.write_state([])
+        w = self.window()
+
+        def press(text):
+            w.amount.set_text(text)
+            w.amount.set_position(-1)
+            ev = Gdk.Event.new(Gdk.EventType.KEY_PRESS)
+            ev.keyval, ev.state = Gdk.KEY_numbersign, 0
+            return w._on_amount_key(w.amount, ev)
+
+        w.amount.set_text("100")
+        w.commit()
+        self.assertTrue(press("Σ÷4"))                 # a calculation: # puts it on the tape as a side line
+        self.assertEqual(w.entries[-1], tc.entry("side", "+", "Σ ÷ 4"))
+        self.assertEqual(w.tape.total, 100)
+        self.assertFalse(press("Check "))             # words: # is typed as usual
+        self.assertEqual(len(w.entries), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

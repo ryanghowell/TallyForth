@@ -211,7 +211,7 @@ def parse_input(amount_text, note_text="", sigma=Decimal(0)):
     """Turn what the user typed into a tape entry, or None for nothing.
 
     "42", "-12.50", "3*12.50", "19.99 lunch", "8%" (of the running total),
-    "Σ × 8%", "=Σ/2" (side calculation), "t" (total), "s" (subtotal).
+    "Σ × 8%", "#Σ/2" or "=Σ/2" (side calculation), "t" (total), "s" (subtotal).
     """
     text = amount_text.strip()
     note = note_text.strip()
@@ -225,7 +225,7 @@ def parse_input(amount_text, note_text="", sigma=Decimal(0)):
 
     kind, op = "num", "+"
     signed = text[0] in "+-−"
-    if text[0] == "=":
+    if text[0] in "=#":      # # is the adding machine's non-add key; = works too
         kind, text = "side", text[1:].strip()
     elif text[0] in "+-−":
         op, text = ("-" if text[0] in "-−" else "+"), text[1:].strip()
@@ -369,7 +369,7 @@ def to_text(entries, decimals, width=56):
             continue
         if k in ("num", "side"):
             work = (e["expr"] + " = ") if is_calc(e["expr"]) else ""
-            sym = "=" if k == "side" else SIGN[e["op"]]
+            sym = "#" if k == "side" else SIGN[e["op"]]
             fig = f"ERR {r['error']}" if r["error"] else fmt(r["shown"], decimals)
             right = f"{work}{fig} {sym}"
         elif k == "subtotal":
