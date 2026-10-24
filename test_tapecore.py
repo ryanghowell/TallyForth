@@ -299,5 +299,22 @@ class ReviewFixTests(unittest.TestCase):
         self.assertEqual([r[2] for r in rows[1:]], ["'+1 guest", "'=HYPERLINK(1)", "plain"])
 
 
+class SigmaTests(unittest.TestCase):
+    def test_total_plus_percent(self):
+        # "Σ + 10.5%" means the total plus tax: a 10.5% line, not the total added again.
+        tape = [tc.entry("num", "+", "100")]
+        for text, op, expr, total in (("Σ+10.5%", "+", "10.5%", D("110.5")), ("sum + 10.5%", "+", "10.5%", D("110.5")),
+                                      ("Σ − 15%", "-", "15%", 85), ("Σ+5×2", "+", "5 × 2", 110)):
+            e = tc.parse_input(text, "", D(100))
+            self.assertEqual((e["op"], e["expr"]), (op, expr), text)
+            self.assertEqual(tc.current_total(tape + [e]), total, text)
+
+    def test_other_sigma_lines_are_left_alone(self):
+        for text in ("Σ−15%+2", "Σ×2", "Σ"):
+            self.assertTrue(tc.parse_input(text)["expr"].startswith("Σ"), text)
+        self.assertEqual(tc.parse_input("-Σ+5")["expr"], "Σ + 5")          # its own sign: as typed
+        self.assertEqual(tc.parse_input("=Σ+10.5%"), tc.entry("side", "+", "Σ + 10.5%"))   # side calc keeps Σ
+
+
 if __name__ == "__main__":
     unittest.main()

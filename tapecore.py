@@ -224,6 +224,7 @@ def parse_input(amount_text, note_text="", sigma=Decimal(0)):
         return entry("note", note=note) if note else None
 
     kind, op = "num", "+"
+    signed = text[0] in "+-−"
     if text[0] == "=":
         kind, text = "side", text[1:].strip()
     elif text[0] in "+-−":
@@ -256,9 +257,27 @@ def parse_input(amount_text, note_text="", sigma=Decimal(0)):
         if kind == "num" and op == "+" and amount_text.strip()[0] not in "+":
             return entry("note", note=(amount_text.strip() + " " + note).strip())
         raise ParseError("nothing to calculate")
+    short = _sigma_plus(toks) if kind == "num" and not signed else None
+    if short:
+        op, toks = short
     expr = pretty(toks)
     evaluate(expr, sigma)
     return entry(kind, op, expr, (rest.strip() + " " + note).strip())
+
+
+def _sigma_plus(toks):
+    """On a tally line, "Σ + 10.5%" means "the total plus 10.5%", so the line to add
+    is 10.5% (adding Σ itself would count the total twice). Returns (op, the rest's
+    tokens), or None when the line isn't Σ plus or minus one more term."""
+    if len(toks) < 3 or toks[0] != ("sum", "Σ") or toks[1] not in (("op", "+"), ("op", "-")):
+        return None
+    try:
+        node = _parse_tokens(toks[2:])
+    except ParseError:
+        return None
+    if node[0] == "bin" and node[1] in "+-":      # Σ − 15% + 2 isn't the same as − (15% + 2)
+        return None
+    return toks[1][1], toks[2:]
 
 
 # ---------- the tape ----------

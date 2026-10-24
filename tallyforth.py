@@ -82,7 +82,8 @@ note only, <tt>Enter</tt>   write a note line
 <tt>8%</tt> then <tt>+</tt>           add 8% of the running total (tax, tip)
 <tt>15%</tt> then <tt>−</tt>          take 15% off the running total (discount)
 <tt>200+8%</tt>         216: a percentage of the number before it
-<tt>Σ</tt> (or type <tt>sum</tt>)    the running total so far, e.g. <tt>Σ×1.5</tt>
+<tt>Σ</tt> (or type <tt>sum</tt>)    the running total so far, e.g. <tt>Σ÷3</tt> then <tt>=</tt>
+<tt>Σ+10.5%</tt> then <tt>+</tt>  same as <tt>10.5%</tt> then <tt>+</tt>: the total plus 10.5% tax
 
 <b>Side calculations</b>
 <tt>Σ÷2</tt> then <tt>=</tt>          show an answer on the tape without adding it
@@ -590,7 +591,8 @@ class TapeWindow(Gtk.ApplicationWindow):
             e = tc.parse_input(text, "", self.tape.total)
         except tc.ParseError:
             return False
-        return e is not None and e["kind"] == "num"
+        # Σ alone isn't finished: + after it starts "Σ + 10.5%" instead of adding the total to itself.
+        return e is not None and e["kind"] == "num" and e["expr"] != "Σ"
 
     def _keypad(self, key):
         text = self.amount.get_text()
@@ -797,6 +799,10 @@ class TapeWindow(Gtk.ApplicationWindow):
             self.flash(f"Can't work out “{amount_text.strip()}”: {ex}", error=True)
             return False
         if e is None:
+            return False
+        if e["kind"] == "num" and e["expr"] == "Σ":
+            self.flash("Σ alone would add the total to itself. For tax, type 10.5% then +; "
+                       "to use the total in a sum, try Σ÷3 then =", error=True)
             return False
         if op and e["kind"] == "num":
             # "-15" then + adds −15; "-15" then − subtracts −15.

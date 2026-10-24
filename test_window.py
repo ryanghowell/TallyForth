@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from decimal import Decimal as D
 
 DATA = tempfile.mkdtemp(prefix="tallyforth-test-")
 atexit.register(shutil.rmtree, DATA, True)
@@ -123,6 +124,25 @@ class WindowTests(unittest.TestCase):
         with open(os.path.join(DATA, "tallyforth", "state.json")) as f:
             st = json.load(f)
         self.assertEqual([(t["title"], t["path"]) for t in st["tapes"]], [("Budget", None), ("Mine", None)])
+
+    def test_sigma_key_then_plus(self):
+        self.write_state([])
+        w = self.window()
+        w.amount.set_text("100")
+        w.commit()
+        w._keypad("Σ")
+        w._keypad("+")                        # Σ alone: + is typed, not a line that doubles the total
+        self.assertEqual(w.amount.get_text(), "Σ+")
+        self.assertEqual(len(w.entries), 1)
+        for key in "10.5%":
+            w._keypad(key)
+        w._keypad("+")
+        self.assertEqual(w.entries[-1]["expr"], "10.5%")
+        self.assertEqual(w.tape.total, D("110.5"))
+        w.amount.set_text("Σ")
+        self.assertFalse(w.commit())          # Enter on Σ alone explains instead
+        self.assertIn("10.5%", w.status.get_text())
+        self.assertEqual(len(w.entries), 2)
 
 
 if __name__ == "__main__":
