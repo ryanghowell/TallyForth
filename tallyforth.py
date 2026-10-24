@@ -29,8 +29,8 @@ WEBSITE = "https://github.com/ryanghowell/TallyForth"
 DATA_DIR = os.path.join(GLib.get_user_data_dir(), "tallyforth")
 # Where earlier copies kept their tapes, copied over on first run: a non-Flatpak install
 # (seen from inside the Flatpak sandbox) and the app from when it was called "Paper Tape".
-OLD_DATA_DIRS = [os.path.expanduser("~/.local/share/tallyforth"),
-                 os.path.join(GLib.get_user_data_dir(), "papertape")]
+HOST_DATA_DIR = os.path.expanduser("~/.local/share/tallyforth") if os.environ.get("FLATPAK_ID") else None
+OLD_DATA_DIRS = [d for d in (HOST_DATA_DIR, os.path.join(GLib.get_user_data_dir(), "papertape")) if d]
 AUTOSAVE = os.path.join(DATA_DIR, "autosave.json")   # the single tape, before tabs
 TAPES_DIR = os.path.join(DATA_DIR, "tapes")           # one autosave file per tab
 STATE = os.path.join(DATA_DIR, "state.json")
@@ -178,6 +178,7 @@ class Tape:
         self.decimals, self.path, self.dirty, self.title = decimals, path, dirty, title
         self.id = tid or GLib.uuid_string_random().replace("-", "")[:12]
         self.undo_stack, self.redo_stack = [], []
+        self.total = tc.Decimal(0)      # running total at the end, kept up to date by refresh()
         self.scroller = self.listbox = self.tab_text = None
 
     def name(self):
@@ -586,7 +587,7 @@ class TapeWindow(Gtk.ApplicationWindow):
     def _can_commit(self, text):
         """True when the amount box holds a finished line that + or − can put on the tape."""
         try:
-            e = tc.parse_input(text, "", tc.current_total(self.entries, self.decimals))
+            e = tc.parse_input(text, "", self.tape.total)
         except tc.ParseError:
             return False
         return e is not None and e["kind"] == "num"
@@ -618,14 +619,10 @@ class TapeWindow(Gtk.ApplicationWindow):
 
     # ---------- rendering ----------
     def refresh(self, scroll_to_end=False, select=None):
-        for child in self.listbox.get_children():
-            self.listbox.remove(child)
         results = tc.compute(self.entries, self.decimals)
-        for e, r in zip(self.entries, results):
-            self.listbox.add(self._make_row(e, r))
-        self.listbox.show_all()
-
-        total = tc.current_total(self.entries, self.decimals)
+        self._sync_rows(results)
+        total = tc.total_after(self.entries, results)
+        self.tape.total = total
         self.display.set_text(tc.fmt(total, self.decimals))
         ctx = self.display.get_style_context()
         (ctx.add_class if total < 0 else ctx.remove_class)("neg")
@@ -646,6 +643,36 @@ class TapeWindow(Gtk.ApplicationWindow):
         if scroll_to_end:
             GLib.idle_add(self._scroll_end)
 
+    def _row_key(self, e, r):
+        """Everything a row shows except its balance and Σ tooltip, which _sync_rows
+        updates in place; rows with the same key can be kept as they are."""
+        return (e["kind"], e.get("op"), e.get("expr"), e.get("note"), r["shown"], r["error"], r["count"],
+                self.decimals)
+
+    def _sync_rows(self, results):
+        """Bring the tape's rows up to date, rebuilding only the ones that changed.
+        Adding a line to a long tape then touches one row instead of all of them."""
+        lb = self.listbox
+        lb.unselect_all()
+        old = lb.get_children()
+        keys = [self._row_key(e, r) for e, r in zip(self.entries, results)]
+        n = min(len(old), len(keys))
+        head = 0
+        while head < n and old[head].key == keys[head]:
+            head += 1
+        tail = 0
+        while tail < n - head and old[-1 - tail].key == keys[-1 - tail]:
+            tail += 1
+        for row in old[head:len(old) - tail]:
+            lb.remove(row)
+        for i in range(head, len(keys) - tail):
+            row = self._make_row(self.entries[i], results[i])
+            row.key = keys[i]
+            row.show_all()
+            lb.insert(row, i)
+        for row, r in zip(lb.get_children(), results):
+            row.set_figures(r)
+
     def _scroll_end(self):
         adj = self.scroller.get_vadjustment()
         adj.set_value(adj.get_upper() - adj.get_page_size())
@@ -653,6 +680,7 @@ class TapeWindow(Gtk.ApplicationWindow):
 
     def _make_row(self, e, r):
         row = Gtk.ListBoxRow()
+        row.set_figures = lambda r: None      # replaced below on rows that show a balance or Σ
         box = Gtk.Box(spacing=8)
         row.add(box)
         row.grip = Gtk.Label(label="⠿")
@@ -677,7 +705,7 @@ class TapeWindow(Gtk.ApplicationWindow):
                 work = Gtk.Label(label=e["expr"] + " =", xalign=1)
                 work.get_style_context().add_class("work")
                 if "Σ" in e["expr"]:
-                    work.set_tooltip_text(f"Σ was {tc.fmt(r['sigma'], self.decimals)} (the running total above this line)")
+                    row.work = work
                 right.pack_start(work, False, False, 0)
             if r["error"]:
                 err = Gtk.Label(label=f"⚠ {r['error']}")
@@ -712,12 +740,20 @@ class TapeWindow(Gtk.ApplicationWindow):
         right.pack_start(op, False, False, 0)
         # Balance column on the far right, like a ledger. Every figure row gets one
         # (blank where it doesn't apply) so the amounts line up.
-        balance = Gtk.Label(label=tc.fmt(r["running"], self.decimals) if k == "num" else "",
-                            xalign=1, width_chars=10)
+        balance = Gtk.Label(xalign=1, width_chars=10)
         balance.get_style_context().add_class("running")
         if k == "num":
             balance.set_tooltip_text("Balance: the running total after this line")
         right.pack_start(balance, False, False, 0)
+        work = getattr(row, "work", None)
+        dec = self.decimals
+
+        def set_figures(r):
+            if k == "num":
+                balance.set_text(tc.fmt(r["running"], dec))
+            if work is not None:
+                work.set_tooltip_text(f"Σ was {tc.fmt(r['sigma'], dec)} (the running total above this line)")
+        row.set_figures = set_figures
         return row
 
     # ---------- editing ----------
@@ -756,7 +792,7 @@ class TapeWindow(Gtk.ApplicationWindow):
                 return False
             amount_text = "=" + amount_text.strip().lstrip("=")
         try:
-            e = tc.parse_input(amount_text, note_text, tc.current_total(self.entries, self.decimals))
+            e = tc.parse_input(amount_text, note_text, self.tape.total)
         except tc.ParseError as ex:
             self.flash(f"Can't work out “{amount_text.strip()}”: {ex}", error=True)
             return False
@@ -1257,7 +1293,8 @@ class TapeWindow(Gtk.ApplicationWindow):
                 f.write(tc.dumps(self.entries, self.decimals))
             os.replace(self.path + ".tmp", self.path)
         except OSError as ex:
-            self.flash(f"Couldn't save: {ex}", error=True)
+            self.flash(f"Couldn't save to {self.path}: {ex.strerror}. Choose where to save it.", error=True)
+            self.save_as()
             return
         self.dirty = False
         self._autosave()
@@ -1357,6 +1394,8 @@ class TapeWindow(Gtk.ApplicationWindow):
                     shutil.copytree(old, DATA_DIR, dirs_exist_ok=True)
                 except OSError:
                     pass
+                if old == HOST_DATA_DIR:
+                    self._forget_file_links()
         self.keypad_item.set_active(True)
         try:
             with open(STATE) as f:
@@ -1392,6 +1431,24 @@ class TapeWindow(Gtk.ApplicationWindow):
         self.notebook.set_current_page(active if isinstance(active, int) and 0 <= active < len(self.tapes) else 0)
         self._set_decimals(self.tape.decimals)
         self._first_run_save = not tapes or "tapes" not in st
+
+    def _forget_file_links(self):
+        """Tapes copied in from outside the Flatpak sandbox keep their lines, but the
+        files they were saved to can't be reached from inside it. Unlink them (the tab
+        keeps the file's name) so Save asks where to save instead of failing."""
+        try:
+            with open(STATE) as f:
+                st = json.load(f)
+            for info in st.get("tapes", []):
+                if info.get("path"):
+                    info["title"] = info.get("title") or os.path.splitext(os.path.basename(info["path"]))[0]
+                    info["path"], info["dirty"] = None, False
+            st.pop("path", None)                  # the single tape from before tabs
+            with open(STATE + ".tmp", "w") as f:
+                json.dump(st, f)
+            os.replace(STATE + ".tmp", STATE)
+        except (OSError, ValueError, AttributeError, TypeError):
+            pass
 
     def _on_close(self, *_):
         try:

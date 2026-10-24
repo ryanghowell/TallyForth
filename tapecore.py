@@ -36,6 +36,16 @@ class ParseError(ValueError):
 _TOKEN = re.compile(
     r"\s*(?:(?P<num>[$€£]?\s*(?:\d[\d,]*(?:\.\d*)?|\.\d+))|(?P<sum>Σ|sum\b)|(?P<op>[-+−*/×÷%()]))", re.I)
 _OP_CANON = {"−": "-", "×": "*", "÷": "/"}
+LIMIT = Decimal(10) ** 24   # bigger than any business sum; keeps rounding within Decimal's precision
+
+
+def clean_number(s):
+    """'$1,234.50' → '1234.50'. A single comma with one or two digits after it and
+    no point is a decimal comma, the way most euro amounts are written: '5,50' → '5.50'."""
+    s = re.sub(r"[$€£\s]", "", s)
+    if "." not in s and re.fullmatch(r"\d+,\d{1,2}", s):
+        s = s.replace(",", ".")
+    return s.replace(",", "").rstrip(".") or "0"
 
 
 def tokenize(text):
@@ -46,7 +56,7 @@ def tokenize(text):
         if not m:
             break
         if m.group("num"):
-            toks.append(("num", re.sub(r"[$€£,\s]", "", m.group("num")).rstrip(".") or "0"))
+            toks.append(("num", clean_number(m.group("num"))))
         elif m.group("sum"):
             toks.append(("sum", "Σ"))
         else:
@@ -175,9 +185,11 @@ def evaluate(text, sigma=Decimal(0)):
         value = _ev(node, sigma)
         if bare[0] == "pct":
             value *= sigma
-        return value
     except (InvalidOperation, OverflowError):
         raise ParseError("number too large")
+    if abs(value) >= LIMIT:
+        raise ParseError("number too large")
+    return value
 
 
 def tidy(text):
@@ -218,16 +230,24 @@ def parse_input(amount_text, note_text="", sigma=Decimal(0)):
         op, text = ("-" if text[0] in "-−" else "+"), text[1:].strip()
 
     toks, rest = tokenize(text)
-    if not toks and kind == "num" and op == "+":
-        # Note first, amount last: "Potato salad $55", "Tip 15%".
+    # "sum" followed by words is a note ("sum of receipts"), not Σ.
+    if kind == "num" and rest and toks == [("sum", "Σ")] and re.match(r"sum\b", text, re.I):
+        toks, rest = [], text
+    if kind == "num" and (not toks or rest):
+        # When words come before a figure at the end, that figure is the amount:
+        # "Potato salad $55", "3 dozen eggs $12", "Tip 15%".
         for m in re.finditer(r"\s(?=\S)", text):
             tail = text[m.end():]
             t_toks, t_rest = tokenize(tail)
             if t_toks and not t_rest:
                 try:
-                    return parse_input(tail, (text[:m.start()].strip() + " " + note).strip(), sigma)
+                    e = parse_input(tail, (text[:m.start()].strip() + " " + note).strip(), sigma)
                 except ParseError:
                     continue
+                if e and e["kind"] == "num":
+                    if op == "-":
+                        e["op"] = "-" if e["op"] == "+" else "+"
+                    return e
     # "12 - refund": a dangling operator belongs to the note, not the sum.
     while rest and toks and toks[-1][0] == "op" and toks[-1][1] in "+-*/(":
         rest = DISPLAY.get(toks[-1][1], toks[-1][1]) + " " + rest
@@ -246,7 +266,10 @@ def round_to(d, decimals):
     """Round half-up (2.345 → 2.35), the way receipts and invoices do. None = keep exact."""
     if decimals is None:
         return d
-    return d.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
+    try:
+        return d.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
+    except InvalidOperation:     # too many digits to round; show it as it is rather than fail
+        return d
 
 
 def compute(entries, decimals=None):
@@ -290,7 +313,12 @@ def compute(entries, decimals=None):
 
 
 def current_total(entries, decimals=None):
-    for e, r in zip(reversed(entries), reversed(compute(entries, decimals))):
+    return total_after(entries, compute(entries, decimals))
+
+
+def total_after(entries, results):
+    """The running total at the end of the tape, from compute()'s results."""
+    for e, r in zip(reversed(entries), reversed(results)):
         if e["kind"] == "total":
             return Decimal(0)
         if r["running"] is not None:
@@ -343,6 +371,9 @@ def to_csv(entries, decimals):
     (subtractions negative) and plain (no thousands separators)."""
     def num(d):
         return "" if d is None else format(round_to(d, decimals), "f")
+    def text(v):
+        # Spreadsheets run a cell starting with = + - @ as a formula; a leading ' keeps it text.
+        return "'" + v if v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
     kinds = {"num": "item", "side": "side calculation", "note": "note", "subtotal": "subtotal", "total": "total"}
     buf = io.StringIO()
     out = csv.writer(buf, lineterminator="\n")
@@ -355,7 +386,7 @@ def to_csv(entries, decimals):
         work = e.get("expr", "") if k in ("num", "side") and is_calc(e.get("expr", "")) else ""
         if r["error"]:
             work = f"{work} (error: {r['error']})".strip()
-        out.writerow([n, kinds[k], e.get("note", ""), work, num(amount),
+        out.writerow([n, kinds[k], text(e.get("note", "")), text(work), num(amount),
                       num(r["running"]) if k == "num" else ""])
     return buf.getvalue()
 
@@ -364,31 +395,73 @@ def to_csv(entries, decimals):
 _MONEY = r"[-−+]?\s*[$€£]?\s*\(?\s*[$€£]?\d[\d,]*(?:\.\d*)?\s*\)?"
 
 
+def _split_figures(line):
+    """Peel the money figures off the end of a line: ("COSTCO", ["-45.23", "1,209.77"])."""
+    figs = []
+    while True:
+        m = re.search(r"(?:^|\s)(" + _MONEY + r")$", line)
+        if not m:
+            return line.strip(), figs
+        figs.insert(0, m.group(1).strip())
+        line = line[:m.start(1)]
+
+
+def _figure(fig):
+    """A pasted figure as (op, digits): '(12.00)' → ('-', '12.00')."""
+    neg = fig.lstrip().startswith(("-", "−")) or ("(" in fig and ")" in fig)
+    return ("-" if neg else "+"), clean_number(re.sub(r"[^\d.,]", "", fig))
+
+
+def _signed(fig):
+    op, digits = _figure(fig)
+    return -Decimal(digits) if op == "-" else Decimal(digits)
+
+
+def _balance_column(rows):
+    """True when the last figure on every line is a running balance (bank and card
+    exports put one after the amount): each balance differs from the one before
+    by that line's amount, whether the list runs oldest or newest first."""
+    rows = [figs for _, figs in rows if figs]
+    if len(rows) < 2 or any(len(figs) < 2 for figs in rows):
+        return False
+    try:
+        bal = [_signed(f[-1]) for f in rows]
+        amt = [abs(_signed(f[-2])) for f in rows]
+    except InvalidOperation:
+        return False
+    return all(abs(bal[i] - bal[i - 1]) in (amt[i], amt[i - 1]) for i in range(1, len(rows)))
+
+
 def parse_pasted(text):
     """Turn a pasted list (from a spreadsheet, statement, email…) into tape lines.
 
     Each line's last money figure becomes the amount and the rest its note:
     "Potato salad<TAB>$55.00", "10/12  COSTCO  -45.23", "Fees (12.00)".
-    A line that starts with the amount works too ("12.50 parking"), and a
-    line with no number at all becomes a note line. Blank lines are skipped.
+    If every line ends with amount then running balance, as statements do, the
+    balance is dropped. A line that starts with the amount works too
+    ("12.50 parking"), and a line with no number at all becomes a note line.
+    Blank lines are skipped.
     """
-    out = []
+    rows = []
     for raw in text.splitlines():
         line = " ".join(raw.replace("\t", "  ").split())
         if not line:
             continue
-        m = re.search(r"(?:^|\s)(" + _MONEY + r")$", line)
-        if m:
-            fig, note = m.group(1), line[:m.start(1)].strip()
-        else:
+        note, figs = _split_figures(line)
+        if not figs:
             m = re.match(r"^(" + _MONEY + r")(?:\s+(.*))?$", line)
-            if not m:
-                out.append(entry("note", note=line))
-                continue
-            fig, note = m.group(1), (m.group(2) or "").strip()
-        neg = fig.lstrip().startswith(("-", "−")) or ("(" in fig and ")" in fig)
-        digits = re.sub(r"[^\d.]", "", fig).rstrip(".") or "0"
-        out.append(entry("num", "-" if neg else "+", digits, note))
+            if m:
+                note, figs = (m.group(2) or "").strip(), [m.group(1).strip()]
+        rows.append((note, figs))
+    drop = 1 if _balance_column(rows) else 0
+    out = []
+    for note, figs in rows:
+        if not figs:
+            out.append(entry("note", note=note))
+            continue
+        keep = figs[:len(figs) - drop]
+        op, digits = _figure(keep[-1])
+        out.append(entry("num", op, digits, " ".join([note] + keep[:-1]).strip()))
     return out
 
 
@@ -422,8 +495,13 @@ def _upgrade_v1(e):
 
 def loads(text):
     data = json.loads(text)
+    if not isinstance(data, dict) or not isinstance(data.get("entries", []), list):
+        raise ValueError("this isn't a TallyForth tape")
     entries = []
     for e in data.get("entries", []):
+        if not isinstance(e, dict):
+            continue
+        e = dict(e, note=str(e.get("note") or ""))
         k = e.get("kind")
         if k not in KINDS:
             continue
@@ -433,4 +511,4 @@ def loads(text):
             op = e.get("op", "+") if e.get("op") in ("+", "-") else "+"
             entries.append(entry(k, op, str(e.get("expr", "")), e.get("note", "")))
     dec = data.get("decimals", 2)
-    return entries, (dec if dec is None or isinstance(dec, int) else 2)
+    return entries, (dec if dec is None or (type(dec) is int and 0 <= dec <= 8) else 2)

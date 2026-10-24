@@ -236,5 +236,68 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(r[5]["shown"], D("37.5"))              # old: (90−15)÷2
 
 
+class ReviewFixTests(unittest.TestCase):
+    """Bugs found in the pre-release review."""
+
+    def test_huge_numbers_are_refused_not_fatal(self):
+        with self.assertRaises(tc.ParseError):
+            tc.parse_input("1000000×1000000×1000000×1000000×1000000×1000000")
+        # A line like that saved by an older version shows an error instead of crashing.
+        r = tc.compute([tc.entry("num", "+", "1" + "0" * 40), tc.entry("num", "+", "5")], 2)
+        self.assertEqual(r[0]["error"], "number too large")
+        self.assertEqual(r[1]["running"], 5)
+        self.assertEqual(tc.round_to(D("1e40"), 4), D("1e40"))   # too long to round: left as is
+
+    def test_quantity_before_the_amount(self):
+        cases = {"3 dozen eggs $12": ("12", "3 dozen eggs"), "2 boxes of paper 30": ("30", "2 boxes of paper"),
+                 "Potato salad $55": ("55", "Potato salad"), "19.99 lunch": ("19.99", "lunch"),
+                 "3 × 12.50 lunch": ("3 × 12.50", "lunch"), "12 - refund": ("12", "− refund")}
+        for text, (expr, note) in cases.items():
+            e = tc.parse_input(text)
+            self.assertEqual((e["expr"], e["note"]), (expr, note), text)
+        self.assertEqual(tc.parse_input("-Refund 20"), tc.entry("num", "-", "20", "Refund"))
+
+    def test_decimal_comma(self):
+        self.assertEqual(tc.parse_input("€5,50")["expr"], "5.50")
+        self.assertEqual(tc.parse_input("1,5")["expr"], "1.5")
+        self.assertEqual(tc.parse_input("1,234")["expr"], "1234")          # thousands, as before
+        self.assertEqual(tc.parse_input("1,234.56")["expr"], "1234.56")
+        self.assertEqual(tc.parse_pasted("Café 4,20")[0]["expr"], "4.20")
+
+    def test_statement_balance_column_is_dropped(self):
+        statement = ("10/12/2026  COSTCO  -45.23  1,209.77\n"
+                     "10/13/2026  PAYROLL  2,000.00  3,209.77\n"
+                     "10/14/2026  GAS  -40.00  3,169.77\n")
+        got = [(e["op"], e["expr"], e["note"]) for e in tc.parse_pasted(statement)]
+        self.assertEqual(got, [("-", "45.23", "10/12/2026 COSTCO"), ("+", "2000.00", "10/13/2026 PAYROLL"),
+                               ("-", "40.00", "10/14/2026 GAS")])
+        newest_first = "\n".join(reversed(statement.strip().splitlines()))
+        self.assertEqual([e["expr"] for e in tc.parse_pasted(newest_first)], ["40.00", "2000.00", "45.23"])
+        # Two figures that aren't a running balance: keep the last, as before.
+        es = tc.parse_pasted("Eggs 3 4.00\nMilk 2 3.00")
+        self.assertEqual([(e["expr"], e["note"]) for e in es], [("4.00", "Eggs 3"), ("3.00", "Milk 2")])
+
+    def test_sum_as_a_word(self):
+        self.assertEqual(tc.parse_input("sum of receipts 40", "", D(100))["expr"], "40")
+        self.assertEqual(tc.parse_input("sum for lunch", "", D(100)), tc.entry("note", note="sum for lunch"))
+        self.assertEqual(tc.parse_input("sum × 2")["expr"], "Σ × 2")        # still Σ in a calculation
+        self.assertEqual(tc.parse_input("Σ lunch")["expr"], "Σ")
+
+    def test_files_that_arent_tapes(self):
+        for text in ("[]", '"hello"', '{"entries": 5}'):
+            with self.assertRaises(ValueError):
+                tc.loads(text)
+        es, dec = tc.loads('{"decimals": 40, "entries": [7, {"kind": "note", "note": 55}, {"kind": "num"}]}')
+        self.assertEqual(es, [tc.entry("note", note="55"), tc.entry("num", expr="0")])
+        self.assertEqual(dec, 2)
+        self.assertEqual(tc.loads('{"decimals": true, "entries": []}')[1], 2)
+
+    def test_csv_notes_are_not_formulas(self):
+        rows = list(csv.reader(io.StringIO(tc.to_csv(
+            [tc.entry("num", "+", "5", "+1 guest"), tc.entry("note", note="=HYPERLINK(1)"),
+             tc.entry("num", "+", "2", "plain")], 2))))
+        self.assertEqual([r[2] for r in rows[1:]], ["'+1 guest", "'=HYPERLINK(1)", "plain"])
+
+
 if __name__ == "__main__":
     unittest.main()
