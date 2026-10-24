@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.tmp
+# Your own tapes stay on your computer
+*.tally
+*.tape
+!examples/*.tally
