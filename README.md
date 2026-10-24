@@ -3,7 +3,7 @@
 A desktop adding-machine calculator for Linux, with a paper tape that keeps a
 running tally and lets you write notes next to the numbers.
 
-![TallyForth with two tapes open](docs/screenshot.png)
+![A dinner bill on TallyForth: six items with notes, a subtotal, 8% tax and a 20% tip, then the total split four ways as a side line](docs/screenshot.png)
 
 Type `Potato salad $55` and press Enter: the note and the amount go on the tape
 together, and the total updates. It's built for everyday business math, such as
