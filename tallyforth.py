@@ -26,10 +26,11 @@ import tapecore as tc  # noqa: E402
 VERSION = "0.1.0"
 APP_ID = "io.github.ryanghowell.TallyForth"
 WEBSITE = "https://github.com/ryanghowell/TallyForth"
+IN_FLATPAK = bool(os.environ.get("FLATPAK_ID"))
 DATA_DIR = os.path.join(GLib.get_user_data_dir(), "tallyforth")
 # Where earlier copies kept their tapes, copied over on first run: a non-Flatpak install
 # (seen from inside the Flatpak sandbox) and the app from when it was called "Paper Tape".
-HOST_DATA_DIR = os.path.expanduser("~/.local/share/tallyforth") if os.environ.get("FLATPAK_ID") else None
+HOST_DATA_DIR = os.path.expanduser("~/.local/share/tallyforth") if IN_FLATPAK else None
 OLD_DATA_DIRS = [d for d in (HOST_DATA_DIR, os.path.join(GLib.get_user_data_dir(), "papertape")) if d]
 AUTOSAVE = os.path.join(DATA_DIR, "autosave.json")   # the single tape, before tabs
 TAPES_DIR = os.path.join(DATA_DIR, "tapes")           # one autosave file per tab
@@ -185,11 +186,10 @@ class Tape:
         self.scroller = self.listbox = self.tab_text = None
 
     def name(self):
-        if self.title:
-            return self.title
+        """A tape saved to a file is called by the file's name; otherwise by its title."""
         if self.path:
             return os.path.splitext(os.path.basename(self.path))[0]
-        return "Untitled"
+        return self.title or "Untitled"
 
 
 def _on_tape(name):
@@ -472,16 +472,49 @@ class TapeWindow(Gtk.ApplicationWindow):
         d = Gtk.Dialog(title="Rename Tape", transient_for=self, modal=True)
         d.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Rename", Gtk.ResponseType.OK)
         d.set_default_response(Gtk.ResponseType.OK)
-        name = Gtk.Entry(text=tape.name(), activates_default=True, width_chars=30, margin=12)
-        d.get_content_area().add(name)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=12)
+        name = Gtk.Entry(text=tape.name(), activates_default=True, width_chars=30)
+        box.pack_start(name, False, False, 0)
+        if tape.path:
+            hint = Gtk.Label(xalign=0, wrap=True, max_width_chars=40,
+                             label="Saves a copy under the new name; the old file stays where it is."
+                             if IN_FLATPAK else f"Renames the file {os.path.basename(tape.path)} too.")
+            hint.get_style_context().add_class("dim-label")
+            box.pack_start(hint, False, False, 0)
+        d.get_content_area().add(box)
         d.show_all()
-        if d.run() == Gtk.ResponseType.OK and name.get_text().strip():
-            tape.title = name.get_text().strip()
-            tape.tab_text.set_text(tape.name())
-            if tape is self.tape:
-                self.refresh()
-            self._save_state()
+        new = name.get_text().strip() if d.run() == Gtk.ResponseType.OK else ""
         d.destroy()
+        new = new.replace("/", "-")
+        if new and new != tape.name():
+            self.rename(tape, new)
+
+    def rename(self, tape, new):
+        """Rename a tape. One saved to a file has its file renamed to match, so the tab
+        and the file never have different names."""
+        if not tape.path:
+            tape.title = new
+        elif IN_FLATPAK:
+            # The sandbox can only change the file it was given, not rename it.
+            if tape is not self.tape:
+                self.notebook.set_current_page(self.notebook.page_num(tape.scroller))
+            self.save_as(suggest=new + os.path.splitext(tape.path)[1])
+            return
+        else:
+            target = os.path.join(os.path.dirname(tape.path), new + (os.path.splitext(tape.path)[1] or ".tally"))
+            if os.path.exists(target):
+                self.flash(f"There's already a file called {os.path.basename(target)} there", error=True)
+                return
+            try:
+                os.rename(tape.path, target)
+            except OSError as ex:
+                self.flash(f"Couldn't rename {os.path.basename(tape.path)}: {ex.strerror}", error=True)
+                return
+            tape.path = target
+        tape.tab_text.set_text(tape.name())
+        if tape is self.tape:
+            self.refresh()
+        self._save_state()
 
     def close_tape(self, tape):
         unsaved = tape.entries and (not tape.path or tape.dirty)
@@ -1321,19 +1354,20 @@ class TapeWindow(Gtk.ApplicationWindow):
         self.refresh()
         self.flash(f"Saved {os.path.basename(self.path)}")
 
-    def save_as(self):
+    def save_as(self, suggest=None):
         d = self._file_dialog(Gtk.FileChooserAction.SAVE, "Save Tape")
         self._tape_filter(d)
-        d.set_current_name(os.path.basename(self.path) if self.path else "tape.tally")
+        d.set_current_name(suggest or self._suggested_filename())
         if d.run() == Gtk.ResponseType.ACCEPT:
             path = d.get_filename()
             if not os.path.splitext(path)[1]:
                 path += ".tally"
-            self.path = path
-            if self.tape.title and self.tape.title.startswith("Tape "):
-                self.tape.title = None          # name the tab after the file
+            self.path = path                    # the tab now goes by the file's name
             self.save_tape()
         d.destroy()
+
+    def _suggested_filename(self):
+        return os.path.basename(self.path) if self.path else self.tape.name().replace("/", "-") + ".tally"
 
     def export_text(self):
         d = self._file_dialog(Gtk.FileChooserAction.SAVE, "Export Tape as Text")

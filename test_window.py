@@ -164,6 +164,42 @@ class WindowTests(unittest.TestCase):
         self.assertFalse(press("Check "))             # words: # is typed as usual
         self.assertEqual(len(w.entries), 2)
 
+    def test_rename_follows_the_file(self):
+        self.write_state([])
+        w = self.window()
+        w.rename(w.tape, "Party")                     # not saved yet: just the tab's name
+        self.assertEqual(w.tape.name(), "Party")
+        self.assertEqual(w._suggested_filename(), "Party.tally")
+
+        folder = tempfile.mkdtemp(dir=DATA)
+        w.amount.set_text("5")
+        w.commit()
+        w.path = os.path.join(folder, "Budget.tally")
+        w.save_tape()
+        self.assertEqual(w.tape.name(), "Budget")    # a saved tape goes by its file's name
+        w.rename(w.tape, "2026 Budget")
+        self.assertEqual(sorted(os.listdir(folder)), ["2026 Budget.tally"])
+        self.assertEqual(w.tape.name(), "2026 Budget")
+        self.assertEqual(w.tape.tab_text.get_text(), "2026 Budget")
+
+        open(os.path.join(folder, "Taken.tally"), "w").close()
+        w.rename(w.tape, "Taken")                     # never overwrites another file
+        self.assertEqual(w.tape.name(), "2026 Budget")
+        self.assertIn("already a file", w.status.get_text())
+
+    def test_rename_in_flatpak_saves_a_copy(self):
+        self.write_state([])
+        w = self.window()
+        w.path = os.path.join(DATA, "Budget.tally")
+        asked = []
+        w.save_as = lambda suggest=None: asked.append(suggest)
+        tf.IN_FLATPAK = True
+        try:
+            w.rename(w.tape, "2026 Budget")
+        finally:
+            tf.IN_FLATPAK = False
+        self.assertEqual(asked, ["2026 Budget.tally"])
+
 
 if __name__ == "__main__":
     unittest.main()
