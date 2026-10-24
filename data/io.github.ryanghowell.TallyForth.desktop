@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=TallyForth
+Comment=Tape calculator with notes alongside the numbers
+Exec=tallyforth
+Icon=io.github.ryanghowell.TallyForth
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=calculator;tape;adding;tally;receipt;budget;
+StartupNotify=true

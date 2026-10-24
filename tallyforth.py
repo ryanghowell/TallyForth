@@ -20,14 +20,17 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))  # realpath: works when run via a symlink
 import tapecore as tc  # noqa: E402
 
 VERSION = "0.1.0"
 APP_ID = "io.github.ryanghowell.TallyForth"
 WEBSITE = "https://github.com/ryanghowell/TallyForth"
 DATA_DIR = os.path.join(GLib.get_user_data_dir(), "tallyforth")
-OLD_DATA_DIR = os.path.join(GLib.get_user_data_dir(), "papertape")  # from when the app was "Paper Tape"
+# Where earlier copies kept their tapes, copied over on first run: a non-Flatpak install
+# (seen from inside the Flatpak sandbox) and the app from when it was called "Paper Tape".
+OLD_DATA_DIRS = [os.path.expanduser("~/.local/share/tallyforth"),
+                 os.path.join(GLib.get_user_data_dir(), "papertape")]
 AUTOSAVE = os.path.join(DATA_DIR, "autosave.json")   # the single tape, before tabs
 TAPES_DIR = os.path.join(DATA_DIR, "tapes")           # one autosave file per tab
 STATE = os.path.join(DATA_DIR, "state.json")
@@ -1180,7 +1183,7 @@ class TapeWindow(Gtk.ApplicationWindow):
 
     def show_about(self):
         d = Gtk.AboutDialog(transient_for=self, modal=True, program_name="TallyForth",
-                            logo_icon_name="accessories-calculator",
+                            logo_icon_name=self.get_application().icon_name,
                             version=VERSION, website=WEBSITE, copyright="© 2026 Ryan Howell",
                             license_type=Gtk.License.GPL_3_0,
                             comments="An adding-machine calculator with notes alongside the numbers.")
@@ -1347,11 +1350,13 @@ class TapeWindow(Gtk.ApplicationWindow):
             self.flash(f"Autosave failed: {ex}", error=True)
 
     def _load_state(self):
-        if not os.path.exists(DATA_DIR) and os.path.isdir(OLD_DATA_DIR):
-            try:
-                shutil.copytree(OLD_DATA_DIR, DATA_DIR)
-            except OSError:
-                pass
+        for old in OLD_DATA_DIRS:
+            fresh = not os.path.isdir(DATA_DIR) or not os.listdir(DATA_DIR)  # missing, or an empty folder
+            if fresh and old != DATA_DIR and os.path.isdir(old):
+                try:
+                    shutil.copytree(old, DATA_DIR, dirs_exist_ok=True)
+                except OSError:
+                    pass
         self.keypad_item.set_active(True)
         try:
             with open(STATE) as f:
@@ -1403,6 +1408,10 @@ class TallyForthApp(Gtk.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID)
         GLib.set_application_name("TallyForth")
+        GLib.set_prgname(APP_ID)  # so the window matches its menu entry and icon
+        theme = Gtk.IconTheme.get_default()
+        self.icon_name = APP_ID if theme.has_icon(APP_ID) else "accessories-calculator"
+        Gtk.Window.set_default_icon_name(self.icon_name)
 
     def do_activate(self):
         win = self.get_active_window() or TapeWindow(self)

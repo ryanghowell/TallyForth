@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Ryan Howell -->
+<component type="desktop-application">
+  <id>io.github.ryanghowell.TallyForth</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>TallyForth</name>
+  <summary>Tape calculator with notes alongside the numbers</summary>
+  <developer id="io.github.ryanghowell">
+    <name>Ryan Howell</name>
+  </developer>
+  <description>
+    <p>
+      TallyForth is an adding-machine calculator with a paper tape. It keeps a
+      running tally and lets you write a note next to every number, so a budget,
+      a quote or a pile of receipts stays readable after you've added it up.
+    </p>
+    <p>Built for everyday business math:</p>
+    <ul>
+      <li>Type a note and an amount together, such as "Potato salad $55"</li>
+      <li>The working stays on the tape, such as 2 × 55 = 110.00</li>
+      <li>Side calculations that aren't added to the tally</li>
+      <li>Business percentages: 200 + 8% is 216</li>
+      <li>Subtotals and totals, with cents that always add up</li>
+      <li>Edit, delete and drag lines to reorder them, and everything recalculates</li>
+      <li>Paste a column of numbers from a spreadsheet or bank statement</li>
+      <li>Several tapes in tabs, saved automatically</li>
+      <li>Export as text or CSV</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.ryanghowell.TallyForth.desktop</launchable>
+  <provides>
+    <binary>tallyforth</binary>
+  </provides>
+  <url type="homepage">https://github.com/ryanghowell/TallyForth</url>
+  <url type="bugtracker">https://github.com/ryanghowell/TallyForth/issues</url>
+  <url type="vcs-browser">https://github.com/ryanghowell/TallyForth</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>A tape with notes, a running balance and the keypad</caption>
+      <image>https://raw.githubusercontent.com/ryanghowell/TallyForth/main/docs/screenshot.png</image>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#fbf8ee</color>
+    <color type="primary" scheme_preference="dark">#2f3a4a</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <releases>
+    <release version="0.1.0" date="2026-10-24">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

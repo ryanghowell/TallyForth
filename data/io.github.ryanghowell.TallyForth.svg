@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a5a70"/>
+      <stop offset="1" stop-color="#2f3a4a"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#efe8d2"/>
+      <stop offset="0.5" stop-color="#fdfaf0"/>
+      <stop offset="1" stop-color="#efe8d2"/>
+    </linearGradient>
+  </defs>
+  <!-- paper tape rising out of the machine, curling over at the top -->
+  <path d="M34 70 V22 C34 12 40 8 48 8 H86 C92 8 94 12 94 16 V70 Z" fill="url(#paper)" stroke="#b8ad8c" stroke-width="2"/>
+  <path d="M34 22 C34 14 40 12 44 14 C48 16 48 22 44 24 C41 25 38 24 36 22" fill="#e2d8b8" stroke="#b8ad8c" stroke-width="1.5"/>
+  <!-- tape lines: notes on the left, amounts on the right -->
+  <g stroke-linecap="round" stroke-width="4">
+    <line x1="50" y1="24" x2="62" y2="24" stroke="#5d74a8"/><line x1="72" y1="24" x2="86" y2="24" stroke="#2b2b2b"/>
+    <line x1="42" y1="34" x2="58" y2="34" stroke="#5d74a8"/><line x1="76" y1="34" x2="86" y2="34" stroke="#2b2b2b"/>
+    <line x1="42" y1="44" x2="54" y2="44" stroke="#5d74a8"/><line x1="72" y1="44" x2="86" y2="44" stroke="#c0392b"/>
+  </g>
+  <line x1="66" y1="51" x2="88" y2="51" stroke="#2b2b2b" stroke-width="1.5"/>
+  <line x1="66" y1="54" x2="88" y2="54" stroke="#2b2b2b" stroke-width="1.5"/>
+  <line x1="68" y1="61" x2="86" y2="61" stroke="#2b2b2b" stroke-width="5" stroke-linecap="round"/>
+  <!-- machine body -->
+  <rect x="12" y="64" width="104" height="56" rx="12" fill="url(#body)"/>
+  <rect x="28" y="62" width="72" height="6" rx="3" fill="#1e2631"/>
+  <g fill="#e9edf2">
+    <rect x="24" y="78" width="16" height="12" rx="3"/><rect x="46" y="78" width="16" height="12" rx="3"/><rect x="68" y="78" width="16" height="12" rx="3"/>
+    <rect x="24" y="96" width="16" height="12" rx="3"/><rect x="46" y="96" width="16" height="12" rx="3"/><rect x="68" y="96" width="16" height="12" rx="3"/>
+  </g>
+  <rect x="90" y="78" width="16" height="30" rx="3" fill="#6ab04c"/>
+  <path d="M98 87 V99 M92 93 H104" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -24,16 +24,37 @@ no scientific functions.
 - **Export** as text or CSV, and zoom the tape text.
 - **Full undo and redo.**
 
-## Requirements
+## Install
 
-Python 3 with GTK 3 bindings (PyGObject). These come with Linux Mint, Ubuntu
-and most GNOME-based desktops. On Debian or Ubuntu, if they're missing:
+### As a Flatpak (any distro)
+
+Works on Fedora, Debian, Ubuntu, Mint and anything else with Flatpak. You need
+the Flathub remote and Flatpak Builder:
 
 ```bash
-sudo apt install python3-gi gir1.2-gtk-3.0
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user flathub org.flatpak.Builder org.gnome.Sdk//50
+git clone https://github.com/ryanghowell/TallyForth.git
+cd TallyForth
+flatpak run org.flatpak.Builder --user --install --force-clean build-dir io.github.ryanghowell.TallyForth.yml
 ```
 
-## Install
+Then start it from your applications menu, or with
+`flatpak run io.github.ryanghowell.TallyForth`. The Flatpak keeps its tapes in
+`~/.var/app/io.github.ryanghowell.TallyForth/`. The first time it runs, it
+copies in any tapes from a non-Flatpak install.
+
+### Directly from source
+
+You need Python 3 with GTK 3 bindings (PyGObject), which come with most
+desktops. If they're missing:
+
+```bash
+sudo apt install python3-gi gir1.2-gtk-3.0     # Debian, Ubuntu, Mint
+sudo dnf install python3-gobject gtk3          # Fedora
+```
+
+Then:
 
 ```bash
 git clone https://github.com/ryanghowell/TallyForth.git
@@ -43,9 +64,9 @@ cd TallyForth
 
 This installs for your user only (no sudo) and adds TallyForth to your
 applications menu. To try it without installing, run `python3 tallyforth.py`.
+Tapes are saved automatically in `~/.local/share/tallyforth/`.
 
-Tapes are saved automatically in `~/.local/share/tallyforth/`. **File → Save**
-writes a `.tally` file wherever you choose.
+**File → Save** writes a `.tally` file wherever you choose.
 
 ## Keyboard
 

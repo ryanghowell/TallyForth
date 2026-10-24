@@ -5,3 +5,6 @@ __pycache__/
 *.tally
 *.tape
 !examples/*.tally
+build-dir/
+.flatpak-builder/
+repo/

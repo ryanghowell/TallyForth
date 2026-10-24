@@ -1,0 +1,31 @@
+# Flatpak build recipe. Build and install locally with:
+#   flatpak run org.flatpak.Builder --user --install --force-clean build-dir io.github.ryanghowell.TallyForth.yml
+app-id: io.github.ryanghowell.TallyForth
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: tallyforth
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Read-only, so tapes from a non-Flatpak install can be copied over on first run.
+  - --filesystem=xdg-data/tallyforth:ro
+modules:
+  - name: tallyforth
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 tallyforth.py /app/share/tallyforth/tallyforth.py
+      - install -Dm644 tapecore.py /app/share/tallyforth/tapecore.py
+      - mkdir -p /app/bin
+      - ln -s ../share/tallyforth/tallyforth.py /app/bin/tallyforth
+      - install -Dm644 data/io.github.ryanghowell.TallyForth.desktop -t /app/share/applications
+      - install -Dm644 data/io.github.ryanghowell.TallyForth.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 data/io.github.ryanghowell.TallyForth.svg -t /app/share/icons/hicolor/scalable/apps
+    sources:
+      - type: dir
+        path: .
+        skip:
+          - build-dir
+          - .flatpak-builder
