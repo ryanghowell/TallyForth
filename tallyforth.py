@@ -566,7 +566,7 @@ class TapeWindow(Gtk.ApplicationWindow):
             ("T  Total", "t", 2, 5, 3, 1, "suggested-action", "Total: print it and start a fresh tally"),
         ]
         # Keys whose symbol isn't self-explanatory get the word in small type under it.
-        words = {"+": "Enter ⏎", "Σ": "Sum", "s": "Subtotal"}
+        words = {"+": "Enter ⏎", "Σ": "Sum", "s": "Subtotal", "=": "Side"}
         for label, key, c, r, w, h, cls, tip in keys:
             b = Gtk.Button(label=label, can_focus=False)
             if key in words:
